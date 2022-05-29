@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { Button, StyleSheet, Text, View } from 'react-native';
+import { Button, StyleSheet, Text, View, Platform, Alert } from 'react-native';
 import * as Notifications from 'expo-notifications';
 
 // 2. Setting for notification object behavior
@@ -15,6 +15,42 @@ Notifications.setNotificationHandler({
 });
 
 export default function App() {
+  // 5. Register Push Token to prepare to send push notification
+  useEffect(() => {
+    async function configurePushNotifications() {
+      // 5.1 Request for user permisssion
+      const { status } = await Notifications.getPermissionsAsync();
+      let finalStatus = status;
+
+      if (finalStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+
+      if (finalStatus !== 'granted') {
+        Alert.alert(
+          'Permission required',
+          'Push notifications need the appropriate permissions.'
+        );
+        return;
+      }
+
+      // 5.2 Get Token
+      const pushTokenData = await Notifications.getExpoPushTokenAsync();
+      console.log(pushTokenData);
+
+      if (Platform.OS === 'android') {
+        // Extra configuration only for Android
+        Notifications.setNotificationChannelAsync('default', {
+          name: 'default',
+          importance: Notifications.AndroidImportance.DEFAULT,
+        });
+      }
+    }
+
+    configurePushNotifications();
+  }, []);
+
   useEffect(() => {
     // 3. (Real) Receiving the notification
     // subscription object is used later for cleaning up
@@ -26,19 +62,6 @@ export default function App() {
         console.log(userName);
       }
     );
-
-    /* From console screen
-    response = {
-      actionIdentifier: 'expo.modules.notifications.actions.DEFAULT',
-      notification: {
-        date: 1653794379618,
-        request: {
-          content: [Object],
-          identifier: 'e7bd9a23-0b46-4cd2-8c99-c4ecd3769529',
-          trigger: [Object],
-        },
-      },
-    }; */
 
     // 4. (Real) Receiving the response
     const subscription2 = Notifications.addNotificationResponseReceivedListener(
@@ -70,13 +93,33 @@ export default function App() {
     });
   }
 
+  // 6. Sending the Push Notification to expo endpoint (as specified in Doc)
+  // https://docs.expo.dev/push-notifications/sending-notifications/#http2-api
+  function sendPushNotificationHandler() {
+    fetch('https://exp.host/--/api/v2/push/send', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        to: 'ExponentPushToken[H4RuzPIz9eAfbIgtu7WdKC]',
+        title: 'Test - sent from a device!',
+        body: 'This is a test!',
+      }),
+    });
+  }
+
   return (
     <View style={styles.container}>
       <Button
         title="Schedule Notification"
         onPress={scheduleNotificationHandler}
       />
-      <StatusBar style="auto" />
+      <Button
+        title="Send Push Notification"
+        onPress={sendPushNotificationHandler}
+      />
+      <StatusBar style="light" />
     </View>
   );
 }
